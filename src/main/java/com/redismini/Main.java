@@ -1,5 +1,9 @@
 package com.redismini;
 
+import com.redismini.server.BlockingServer;
+
+import java.io.IOException;
+
 /**
  * Điểm khởi động: java -jar redis-mini.jar --port 6380
  */
@@ -7,10 +11,12 @@ public class Main {
 
     static final int DEFAULT_PORT = 6380;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         int port = parsePort(args);
         System.out.println("redis-mini starting on port " + port);
-        // TODO Giai đoạn 1: khởi động BlockingServer tại đây
+        try (BlockingServer server = new BlockingServer(port)) {
+            server.start();
+        }
     }
 
     static int parsePort(String[] args) {
