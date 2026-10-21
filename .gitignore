@@ -15,3 +15,6 @@ appendonly.aof
 # OS
 Thumbs.db
 .DS_Store
+
+PLAN.md
+
