@@ -1,0 +1,17 @@
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Build / runtime
+*.class
+*.log
+appendonly.aof
+*.jfr
+
+# OS
+Thumbs.db
+.DS_Store
