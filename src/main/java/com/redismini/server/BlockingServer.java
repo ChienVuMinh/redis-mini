@@ -1,9 +1,6 @@
 package com.redismini.server;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -19,23 +16,32 @@ public class BlockingServer implements AutoCloseable {
 
     private final int port;
     private final ExecutorService executor = Executors.newCachedThreadPool();
-    private ServerSocket serverSocket;
+    private volatile ServerSocket serverSocket;
     private volatile boolean running;
 
     public BlockingServer(int port) {
         this.port = port;
     }
 
-    /**
-     * Mở cổng rồi chặn thread gọi hàm này, nhận client cho đến khi close().
-     * Không mở được cổng (ví dụ đang bị chiếm) thì ném IOException ra ngoài:
-     * server không có lý do gì để chạy tiếp.
-     */
+    /** Mở cổng rồi phục vụ client cho đến khi close(). Chặn thread gọi hàm này. */
     public void start() throws IOException {
+        bind();
+        serve();
+    }
+
+    /**
+     * Mở cổng. Không mở được (ví dụ cổng đang bị chiếm) thì ném IOException ra ngoài:
+     * server không có lý do gì để chạy tiếp.
+     * Tách riêng khỏi serve() để test biết chắc cổng đã mở trước khi kết nối.
+     */
+    public void bind() throws IOException {
         serverSocket = new ServerSocket(port);
         running = true;
         System.out.println("Listening on port " + getPort());
+    }
 
+    /** Vòng lặp nhận client. Chặn thread gọi hàm này cho đến khi close(). */
+    public void serve() throws IOException {
         while (running) {
             Socket client;
             try {
@@ -64,7 +70,7 @@ public class BlockingServer implements AutoCloseable {
         try (client;
              BufferedReader in = new BufferedReader(
                      new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
-             OutputStream out = client.getOutputStream()) {
+             OutputStream out = new BufferedOutputStream(client.getOutputStream())) {
 
             String line;
             // readLine() chặn cho đến khi nhận đủ một dòng; trả về null khi client đóng kết nối
