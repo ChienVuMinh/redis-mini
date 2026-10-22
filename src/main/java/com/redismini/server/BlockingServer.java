@@ -1,9 +1,14 @@
 package com.redismini.server;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -47,15 +52,39 @@ public class BlockingServer implements AutoCloseable {
         }
     }
 
-    /** Bước 1.1: chỉ ghi nhận kết nối rồi đóng. Bước 1.2 sẽ đọc PING ở đây. */
+    /**
+     * Phục vụ một client: đọc từng dòng, trả lời, lặp lại cho đến khi client ngắt kết nối.
+     * Giai đoạn 2 sẽ thay việc đọc theo dòng bằng RespParser.
+     */
     private void handle(Socket client) {
-        try (client) {
-            System.out.println("Client connected: " + client.getRemoteSocketAddress()
-                    + " on thread " + Thread.currentThread().getName());
+        SocketAddress address = client.getRemoteSocketAddress();
+        System.out.println("Client connected: " + address
+                + " on thread " + Thread.currentThread().getName());
+
+        try (client;
+             BufferedReader in = new BufferedReader(
+                     new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
+             OutputStream out = client.getOutputStream()) {
+
+            String line;
+            // readLine() chặn cho đến khi nhận đủ một dòng; trả về null khi client đóng kết nối
+            while ((line = in.readLine()) != null) {
+                String command = line.trim();
+                if (command.isEmpty()) {
+                    continue;
+                }
+                String reply = command.equalsIgnoreCase("PING")
+                        ? "+PONG\r\n"
+                        : "-ERR unknown command '" + command + "'\r\n";
+                out.write(reply.getBytes(StandardCharsets.UTF_8));
+                // Đẩy dữ liệu đi ngay, không chờ đầy buffer
+                out.flush();
+            }
         } catch (IOException e) {
-            // Lỗi của một client không được làm sập cả server
-            System.err.println("Client error: " + e.getMessage());
+            // Client mất kết nối đột ngột (rút mạng, tắt ngang): chỉ ảnh hưởng client này
+            System.err.println("Client error " + address + ": " + e.getMessage());
         }
+        System.out.println("Client disconnected: " + address);
     }
 
     /** Cổng thật đang lắng nghe. Khi tạo server với port 0, OS sẽ tự chọn cổng trống. */
