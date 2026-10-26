@@ -91,8 +91,8 @@ class BlockingServerTest {
     @Test
     void repliesErrorToUnknownCommand() throws IOException {
         try (TestClient client = new TestClient(server.getPort())) {
-            assertThat(client.send("HELLO", "x"))
-                    .isEqualTo(new SimpleError("ERR unknown command 'HELLO', with args beginning with: 'x' "));
+            assertThat(client.send("FOO", "x"))
+                    .isEqualTo(new SimpleError("ERR unknown command 'FOO', with args beginning with: 'x' "));
         }
     }
 
@@ -109,7 +109,7 @@ class BlockingServerTest {
     void servesManyCommandsOnSameConnection() throws IOException {
         try (TestClient client = new TestClient(server.getPort())) {
             assertThat(client.send("PING")).isEqualTo(new SimpleString("PONG"));
-            assertThat(client.send("HELLO")).isInstanceOf(SimpleError.class);
+            assertThat(client.send("FOO")).isInstanceOf(SimpleError.class);
             assertThat(client.send("PING")).isEqualTo(new SimpleString("PONG"));
         }
     }
