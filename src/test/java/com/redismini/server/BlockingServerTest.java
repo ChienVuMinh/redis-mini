@@ -1,5 +1,6 @@
 package com.redismini.server;
 
+import com.redismini.command.CommandRegistry;
 import com.redismini.protocol.RespParser;
 import com.redismini.protocol.RespValue;
 import com.redismini.protocol.RespValue.BulkString;
@@ -39,7 +40,7 @@ class BlockingServerTest {
     @BeforeEach
     void startServer() throws IOException {
         // Port 0: OS tự chọn cổng trống, các test không bao giờ đụng cổng nhau hay đụng 6380
-        server = new BlockingServer(0);
+        server = new BlockingServer(0, CommandRegistry.createDefault());
         // bind() chạy trên thread của test: xong dòng này là cổng chắc chắn đã mở
         server.bind();
         // serve() chặn, nên chạy trên thread riêng

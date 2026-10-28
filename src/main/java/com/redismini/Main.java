@@ -1,5 +1,6 @@
 package com.redismini;
 
+import com.redismini.command.CommandRegistry;
 import com.redismini.server.BlockingServer;
 
 import java.io.IOException;
@@ -14,7 +15,7 @@ public class Main {
     public static void main(String[] args) throws IOException {
         int port = parsePort(args);
         System.out.println("redis-mini starting on port " + port);
-        try (BlockingServer server = new BlockingServer(port)) {
+        try (BlockingServer server = new BlockingServer(port, CommandRegistry.createDefault())) {
             server.start();
         }
     }

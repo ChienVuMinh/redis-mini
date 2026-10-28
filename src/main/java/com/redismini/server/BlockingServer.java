@@ -1,11 +1,10 @@
 package com.redismini.server;
 
+import com.redismini.command.CommandRegistry;
 import com.redismini.protocol.RespParser;
 import com.redismini.protocol.RespProtocolException;
-import com.redismini.protocol.RespValue;
 import com.redismini.protocol.RespValue.BulkString;
 import com.redismini.protocol.RespValue.SimpleError;
-import com.redismini.protocol.RespValue.SimpleString;
 import com.redismini.protocol.RespWriter;
 
 import java.io.*;
@@ -23,12 +22,15 @@ import java.util.concurrent.Executors;
 public class BlockingServer implements AutoCloseable {
 
     private final int port;
+    private final CommandRegistry commands;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
 
-    public BlockingServer(int port) {
+    /** @param commands các lệnh server hiểu, dùng chung cho mọi client */
+    public BlockingServer(int port, CommandRegistry commands) {
         this.port = port;
+        this.commands = commands;
     }
 
     /** Mở cổng rồi phục vụ client cho đến khi close(). Chặn thread gọi hàm này. */
@@ -85,7 +87,7 @@ public class BlockingServer implements AutoCloseable {
                 List<BulkString> command;
                 // readCommand() chặn cho đến khi đủ một lệnh; trả về null khi client đóng kết nối
                 while ((command = parser.readCommand()) != null) {
-                    writer.write(execute(command));
+                    writer.write(commands.execute(command));
                     // Đẩy câu trả lời đi ngay, không chờ đầy buffer
                     writer.flush();
                 }
@@ -99,26 +101,6 @@ public class BlockingServer implements AutoCloseable {
             System.err.println("Client error " + address + ": " + e.getMessage());
         }
         System.out.println("Client disconnected: " + address);
-    }
-
-    /** Chạy một lệnh. Giai đoạn 3 sẽ thay bằng CommandRegistry. */
-    private RespValue execute(List<BulkString> command) {
-        String name = command.get(0).asString();
-        if (name.equalsIgnoreCase("PING")) {
-            return switch (command.size()) {
-                case 1 -> new SimpleString("PONG");
-                // PING message: trả lại đúng message, dạng Bulk String như Redis thật
-                case 2 -> command.get(1);
-                default -> new SimpleError("ERR wrong number of arguments for 'ping' command");
-            };
-        }
-        StringBuilder args = new StringBuilder();
-        for (BulkString arg : command.subList(1, command.size())) {
-            args.append('\'').append(arg.asString()).append("' ");
-        }
-        // Tên lệnh do client gửi có thể chứa \r\n, mà Simple Error thì không được chứa
-        String message = "ERR unknown command '" + name + "', with args beginning with: " + args;
-        return new SimpleError(message.replace('\r', ' ').replace('\n', ' '));
     }
 
     /** Cổng thật đang lắng nghe. Khi tạo server với port 0, OS sẽ tự chọn cổng trống. */
