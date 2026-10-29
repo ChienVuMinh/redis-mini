@@ -3,6 +3,7 @@ package com.redismini.command;
 import com.redismini.protocol.RespValue;
 import com.redismini.protocol.RespValue.BulkString;
 import com.redismini.protocol.RespValue.SimpleError;
+import com.redismini.store.DataStore;
 
 import java.util.HashMap;
 import java.util.List;
@@ -30,10 +31,20 @@ public class CommandRegistry {
         this.commands = Map.copyOf(byName);
     }
 
-    /** Các lệnh redis-mini hỗ trợ. Thêm lệnh mới vào đây. */
-    public static CommandRegistry createDefault() {
+    /**
+     * Các lệnh redis-mini hỗ trợ. Thêm lệnh mới vào đây.
+     *
+     * @param store kho dữ liệu dùng chung: mọi lệnh nhận cùng một object, nên SET của client này
+     *              thì GET của client khác thấy được
+     */
+    public static CommandRegistry createDefault(DataStore store) {
         return new CommandRegistry(List.of(
-                new PingCommand()
+                new PingCommand(),
+                new EchoCommand(),
+                new SetCommand(store),
+                new GetCommand(store),
+                new DelCommand(store),
+                new ExistsCommand(store)
         ));
     }
 

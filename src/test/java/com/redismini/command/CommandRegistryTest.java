@@ -5,6 +5,7 @@ import com.redismini.protocol.RespValue.BulkString;
 import com.redismini.protocol.RespValue.RespInteger;
 import com.redismini.protocol.RespValue.SimpleError;
 import com.redismini.protocol.RespValue.SimpleString;
+import com.redismini.store.DataStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -80,7 +81,7 @@ class CommandRegistryTest {
 
     @Test
     void defaultRegistryHasPing() {
-        assertThat(CommandRegistry.createDefault().execute(command("PING")))
+        assertThat(CommandRegistry.createDefault(new DataStore()).execute(command("PING")))
                 .isEqualTo(new SimpleString("PONG"));
     }
 }

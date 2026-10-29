@@ -5,9 +5,11 @@ import com.redismini.protocol.RespParser;
 import com.redismini.protocol.RespValue;
 import com.redismini.protocol.RespValue.BulkString;
 import com.redismini.protocol.RespValue.RespArray;
+import com.redismini.protocol.RespValue.RespInteger;
 import com.redismini.protocol.RespValue.SimpleError;
 import com.redismini.protocol.RespValue.SimpleString;
 import com.redismini.protocol.RespWriter;
+import com.redismini.store.DataStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +42,7 @@ class BlockingServerTest {
     @BeforeEach
     void startServer() throws IOException {
         // Port 0: OS tự chọn cổng trống, các test không bao giờ đụng cổng nhau hay đụng 6380
-        server = new BlockingServer(0, CommandRegistry.createDefault());
+        server = new BlockingServer(0, CommandRegistry.createDefault(new DataStore()));
         // bind() chạy trên thread của test: xong dòng này là cổng chắc chắn đã mở
         server.bind();
         // serve() chặn, nên chạy trên thread riêng
@@ -123,6 +125,28 @@ class BlockingServerTest {
             // first vẫn đang mở kết nối: second vẫn phải được trả lời, không bị chặn
             assertThat(second.send("PING")).isEqualTo(new SimpleString("PONG"));
             assertThat(first.send("PING")).isEqualTo(new SimpleString("PONG"));
+        }
+    }
+
+    @Test
+    void setThenGetOnSameConnection() throws IOException {
+        try (TestClient client = new TestClient(server.getPort())) {
+            assertThat(client.send("SET", "tên", "Chiến")).isEqualTo(new SimpleString("OK"));
+            assertThat(client.send("GET", "tên")).isEqualTo(BulkString.of("Chiến"));
+            assertThat(client.send("GET", "không có")).isEqualTo(BulkString.NULL);
+        }
+    }
+
+    @Test
+    void clientsShareTheSameData() throws IOException {
+        // Hai kết nối chạy trên hai thread khác nhau, nhưng dùng chung một DataStore
+        try (TestClient writer = new TestClient(server.getPort());
+             TestClient reader = new TestClient(server.getPort())) {
+            writer.send("SET", "k", "v");
+
+            assertThat(reader.send("GET", "k")).isEqualTo(BulkString.of("v"));
+            assertThat(reader.send("DEL", "k", "khác")).isEqualTo(new RespInteger(1));
+            assertThat(writer.send("EXISTS", "k")).isEqualTo(new RespInteger(0));
         }
     }
 
