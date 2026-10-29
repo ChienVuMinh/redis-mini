@@ -1,6 +1,7 @@
 package com.redismini.store;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.UnaryOperator;
 
 /**
  * Nơi chứa toàn bộ dữ liệu: key -> Entry. Một DataStore dùng chung cho mọi client.
@@ -39,6 +40,24 @@ public class DataStore {
     /** Số key hiện có, giống DBSIZE. */
     public int size() {
         return data.size();
+    }
+
+    /**
+     * Đọc giá trị cũ, tính giá trị mới và ghi lại như MỘT thao tác: trong lúc function chạy,
+     * thread khác không đọc-ghi xen vào giữa key này được. Dùng cho lệnh kiểu INCR.
+     * <p>
+     * Trong lúc function chạy, key đang bị khoá: function phải ngắn và không được gọi lại DataStore.
+     *
+     * @param function nhận giá trị hiện tại (null nếu chưa có key), trả giá trị mới (null để xoá key).
+     *                 Ném exception thì không có gì bị thay đổi, exception bay ra cho người gọi.
+     * @return giá trị mới
+     */
+    public byte[] update(String key, UnaryOperator<byte[]> function) {
+        Entry updated = data.compute(key, (k, old) -> {
+            byte[] value = function.apply(old == null ? null : old.value());
+            return value == null ? null : new Entry(value);
+        });
+        return updated == null ? null : updated.value();
     }
 
     

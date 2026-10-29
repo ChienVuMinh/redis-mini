@@ -44,7 +44,8 @@ public class CommandRegistry {
                 new SetCommand(store),
                 new GetCommand(store),
                 new DelCommand(store),
-                new ExistsCommand(store)
+                new ExistsCommand(store),
+                new IncrCommand(store)
         ));
     }
 

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DataStoreTest {
 
@@ -63,6 +64,45 @@ class DataStoreTest {
 
         assertThat(store.exists("a")).isTrue();
         assertThat(store.size()).isEqualTo(2);
+    }
+
+    @Test
+    void updateReceivesCurrentValueAndStoresResult() {
+        store.set("k", bytes("a"));
+
+        byte[] result = store.update("k", old -> bytes(new String(old, StandardCharsets.UTF_8) + "b"));
+
+        assertThat(result).isEqualTo(bytes("ab"));
+        assertThat(store.get("k")).isEqualTo(bytes("ab"));
+    }
+
+    @Test
+    void updateOnMissingKeyReceivesNull() {
+        store.update("k", old -> {
+            assertThat(old).isNull();
+            return bytes("new");
+        });
+
+        assertThat(store.get("k")).isEqualTo(bytes("new"));
+    }
+
+    @Test
+    void updateReturningNullDeletesKey() {
+        store.set("k", bytes("v"));
+
+        assertThat(store.update("k", old -> null)).isNull();
+        assertThat(store.exists("k")).isFalse();
+    }
+
+    @Test
+    void updateThatThrowsChangesNothing() {
+        store.set("k", bytes("v"));
+
+        assertThatThrownBy(() -> store.update("k", old -> {
+            throw new IllegalStateException("boom");
+        })).isInstanceOf(IllegalStateException.class);
+
+        assertThat(store.get("k")).isEqualTo(bytes("v"));
     }
 
     @Test
