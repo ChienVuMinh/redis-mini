@@ -8,19 +8,12 @@ import com.redismini.store.DataStore;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * {@code INCR key}: cộng 1 vào số nguyên lưu ở key, trả giá trị mới. Key chưa có thì coi là 0.
  * Redis không có kiểu số riêng: value vẫn là chuỗi byte "41", INCR đọc ra số, cộng, ghi lại "42".
  */
 public class IncrCommand implements Command {
-
-    /**
-     * Dạng số Redis chấp nhận: "0" hoặc số không có số 0 ở đầu, có thể có dấu trừ.
-     * Không chấp nhận "+5", "007", "-0", " 5" (Long.parseLong lại chấp nhận "+5" và "007").
-     */
-    private static final Pattern INTEGER = Pattern.compile("0|-?[1-9][0-9]*");
 
     private final DataStore store;
 
@@ -55,10 +48,6 @@ public class IncrCommand implements Command {
 
     /** @throws NumberFormatException nếu không phải số nguyên hợp lệ hoặc vượt khoảng của long */
     private static long parseInteger(byte[] value) {
-        String text = new String(value, StandardCharsets.US_ASCII);
-        if (!INTEGER.matcher(text).matches()) {
-            throw new NumberFormatException(text);
-        }
-        return Long.parseLong(text);
+        return Command.parseInteger(new String(value, StandardCharsets.US_ASCII));
     }
 }

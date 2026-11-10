@@ -1,6 +1,7 @@
 package com.redismini.store;
 
 import java.time.Clock;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,6 +21,7 @@ public class DataStore {
 
     private final Clock clock;
     private final ConcurrentHashMap<String, Entry> data = new ConcurrentHashMap<>();
+    private final Set<String> expires = ConcurrentHashMap.newKeySet();
 
     public DataStore() {
         this(Clock.systemUTC());
@@ -43,7 +45,9 @@ public class DataStore {
         }
         if (entry.isExpired(clock.millis())) {
             // Lazy eviction: chỉ xoá nếu mapping trong map vẫn là entry này
-            data.remove(key, entry);
+            if (data.remove(key, entry)) {
+                expires.remove(key);
+            }
             return null;
         }
         return entry.value();
@@ -57,13 +61,22 @@ public class DataStore {
     /** Ghi đè key kèm theo thời điểm hết hạn tính theo epoch millis. */
     public void set(String key, byte[] value, Long expireAt) {
         data.put(key, new Entry(value, expireAt));
+        if (expireAt != null) {
+            expires.add(key);
+        } else {
+            expires.remove(key);
+        }
     }
 
     /** @return true nếu key tồn tại, chưa hết hạn và đã bị xoá */
     public boolean delete(String key) {
         long now = clock.millis();
         Entry removed = data.remove(key);
-        return removed != null && !removed.isExpired(now);
+        if (removed != null) {
+            expires.remove(key);
+            return !removed.isExpired(now);
+        }
+        return false;
     }
 
     /** Kiểm tra key có tồn tại và chưa hết hạn không (xoá nếu đã hết hạn). */
@@ -73,7 +86,9 @@ public class DataStore {
             return false;
         }
         if (entry.isExpired(clock.millis())) {
-            data.remove(key, entry);
+            if (data.remove(key, entry)) {
+                expires.remove(key);
+            }
             return false;
         }
         return true;
@@ -101,6 +116,7 @@ public class DataStore {
             byte[] value = function.apply(oldValue);
             return value == null ? null : new Entry(value);
         });
+        expires.remove(key);
         return updated == null ? null : updated.value();
     }
 
@@ -119,7 +135,13 @@ public class DataStore {
             updated[0] = true;
             return new Entry(old.value(), expireAtMillis);
         });
-        return updated[0];
+        if (updated[0]) {
+            expires.add(key);
+            return true;
+        } else {
+            expires.remove(key);
+            return false;
+        }
     }
 
     /**
@@ -134,7 +156,9 @@ public class DataStore {
         }
         long now = clock.millis();
         if (entry.isExpired(now)) {
-            data.remove(key, entry);
+            if (data.remove(key, entry)) {
+                expires.remove(key);
+            }
             return -2;
         }
         if (entry.expireAt() == null) {
@@ -163,12 +187,25 @@ public class DataStore {
             }
             return old;
         });
-        return persisted[0];
+        if (persisted[0]) {
+            expires.remove(key);
+            return true;
+        } else {
+            if (!data.containsKey(key)) {
+                expires.remove(key);
+            }
+            return false;
+        }
     }
 
-    /** Trả về danh sách tất cả các key hiện có để ExpiryManager lấy mẫu ngẫu nhiên. */
+    /** Trả về danh sách tất cả các key hiện có. */
     public Set<String> keySet() {
         return data.keySet();
+    }
+
+    /** Trả về danh sách tất cả các key có cấu hình TTL. Giống db->expires trong Redis. */
+    public Set<String> expiresKeySet() {
+        return Collections.unmodifiableSet(expires);
     }
 
     /**
@@ -180,7 +217,10 @@ public class DataStore {
     public boolean evictIfExpired(String key) {
         Entry entry = data.get(key);
         if (entry != null && entry.isExpired(clock.millis())) {
-            return data.remove(key, entry);
+            if (data.remove(key, entry)) {
+                expires.remove(key);
+                return true;
+            }
         }
         return false;
     }

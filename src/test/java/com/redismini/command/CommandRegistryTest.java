@@ -84,4 +84,13 @@ class CommandRegistryTest {
         assertThat(CommandRegistry.createDefault(new DataStore()).execute(command("PING")))
                 .isEqualTo(new SimpleString("PONG"));
     }
+
+    @Test
+    void defaultRegistryHasTtlCommands() {
+        CommandRegistry registry = CommandRegistry.createDefault(new DataStore());
+        // Kiểm tra các lệnh TTL mới đã được đăng ký trong registry mặc định
+        assertThat(registry.execute(command("TTL", "k"))).isEqualTo(new RespInteger(-2));
+        assertThat(registry.execute(command("EXPIRE", "k", "10"))).isEqualTo(new RespInteger(0));
+        assertThat(registry.execute(command("PERSIST", "k"))).isEqualTo(new RespInteger(0));
+    }
 }

@@ -3,6 +3,7 @@ package com.redismini;
 import com.redismini.command.CommandRegistry;
 import com.redismini.server.BlockingServer;
 import com.redismini.store.DataStore;
+import com.redismini.store.ExpiryManager;
 
 import java.io.IOException;
 
@@ -16,7 +17,9 @@ public class Main {
     public static void main(String[] args) throws IOException {
         int port = parsePort(args);
         System.out.println("redis-mini starting on port " + port);
-        try (BlockingServer server = new BlockingServer(port, CommandRegistry.createDefault(new DataStore()))) {
+        DataStore store = new DataStore();
+        ExpiryManager expiryManager = new ExpiryManager(store);
+        try (BlockingServer server = new BlockingServer(port, CommandRegistry.createDefault(store), expiryManager)) {
             server.start();
         }
     }

@@ -237,6 +237,23 @@ class DataStoreTest {
         assertThat(store.exists("permanent")).isTrue();
     }
 
+    @Test
+    void expiresKeySetTracksOnlyKeysWithTtl() {
+        store.set("temp", bytes("1"), 1_010_000L);
+        store.set("perm", bytes("2"));
+
+        assertThat(store.expiresKeySet()).containsExactly("temp");
+
+        store.persist("temp");
+        assertThat(store.expiresKeySet()).isEmpty();
+
+        store.setExpire("perm", 1_010_000L);
+        assertThat(store.expiresKeySet()).containsExactly("perm");
+
+        store.delete("perm");
+        assertThat(store.expiresKeySet()).isEmpty();
+    }
+
     /** Đồng hồ giả lập có thể chủ động tua thời gian mà không cần Thread.sleep */
     private static class MutableClock extends Clock {
         private Instant now;

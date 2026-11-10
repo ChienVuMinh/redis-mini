@@ -6,6 +6,7 @@ import com.redismini.protocol.RespProtocolException;
 import com.redismini.protocol.RespValue.BulkString;
 import com.redismini.protocol.RespValue.SimpleError;
 import com.redismini.protocol.RespWriter;
+import com.redismini.store.ExpiryManager;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -23,14 +24,20 @@ public class BlockingServer implements AutoCloseable {
 
     private final int port;
     private final CommandRegistry commands;
+    private final ExpiryManager expiryManager;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
 
     /** @param commands các lệnh server hiểu, dùng chung cho mọi client */
     public BlockingServer(int port, CommandRegistry commands) {
+        this(port, commands, null);
+    }
+
+    public BlockingServer(int port, CommandRegistry commands, ExpiryManager expiryManager) {
         this.port = port;
         this.commands = commands;
+        this.expiryManager = expiryManager;
     }
 
     /** Mở cổng rồi phục vụ client cho đến khi close(). Chặn thread gọi hàm này. */
@@ -47,6 +54,9 @@ public class BlockingServer implements AutoCloseable {
     public void bind() throws IOException {
         serverSocket = new ServerSocket(port);
         running = true;
+        if (expiryManager != null) {
+            expiryManager.start();
+        }
         System.out.println("Listening on port " + getPort());
     }
 
@@ -111,6 +121,9 @@ public class BlockingServer implements AutoCloseable {
     @Override
     public void close() throws IOException {
         running = false;
+        if (expiryManager != null) {
+            expiryManager.close();
+        }
         if (serverSocket != null) {
             serverSocket.close();
         }
