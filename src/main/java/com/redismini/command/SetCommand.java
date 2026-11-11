@@ -9,8 +9,9 @@ import com.redismini.store.DataStore;
 import java.util.List;
 
 /**
- * {@code SET key value [EX seconds]}: ghi đè nếu key đã có, trả {@code +OK}.
+ * {@code SET key value [EX seconds | PXAT timestamp-ms]}: ghi đè nếu key đã có, trả {@code +OK}.
  * Tuỳ chọn {@code EX seconds} thiết lập thời gian hết hạn sau số giây chỉ định.
+ * Tuỳ chọn {@code PXAT timestamp-ms} đặt thời điểm hết hạn tuyệt đối (dùng cho AOF).
  */
 public class SetCommand implements Command {
 
@@ -26,38 +27,69 @@ public class SetCommand implements Command {
     }
 
     @Override
+    public boolean isWrite() {
+        return true;
+    }
+
+    @Override
     public RespValue execute(List<BulkString> args) {
+        return executeWithOutcome(args).response();
+    }
+
+    @Override
+    public Outcome executeWithOutcome(List<BulkString> args) {
         if (args.size() < 2) {
-            return Command.wrongNumberOfArguments(name());
+            return new Outcome(Command.wrongNumberOfArguments(name()), null);
         }
+        BulkString keyArg = args.get(0);
+        BulkString valueArg = args.get(1);
         if (args.size() == 2) {
-            store.set(args.get(0).asString(), args.get(1).data());
-            return new SimpleString("OK");
+            store.set(keyArg.asString(), valueArg.data());
+            return new Outcome(new SimpleString("OK"), List.of(BulkString.of("SET"), keyArg, valueArg));
         }
         if (args.size() == 4) {
             String option = args.get(2).asString();
-            if (!option.equalsIgnoreCase("EX")) {
-                return new SimpleError("ERR syntax error");
+            long rawValue;
+            if (!option.equalsIgnoreCase("EX") && !option.equalsIgnoreCase("PXAT")) {
+                return new Outcome(new SimpleError("ERR syntax error"), null);
             }
-            long seconds;
             try {
-                seconds = Command.parseInteger(args.get(3).asString());
+                rawValue = Command.parseInteger(args.get(3).asString());
             } catch (NumberFormatException e) {
-                return new SimpleError("ERR value is not an integer or out of range");
+                return new Outcome(new SimpleError("ERR value is not an integer or out of range"), null);
             }
-            if (seconds <= 0) {
-                return new SimpleError("ERR invalid expire time in 'set' command");
+            if (rawValue <= 0) {
+                return new Outcome(new SimpleError("ERR invalid expire time in 'set' command"), null);
             }
+
             long expireAt;
-            try {
-                long millis = Math.multiplyExact(seconds, 1000L);
-                expireAt = Math.addExact(store.getClock().millis(), millis);
-            } catch (ArithmeticException e) {
-                return new SimpleError("ERR invalid expire time in 'set' command");
+            if (option.equalsIgnoreCase("EX")) {
+                try {
+                    long millis = Math.multiplyExact(rawValue, 1000L);
+                    expireAt = Math.addExact(store.getClock().millis(), millis);
+                } catch (ArithmeticException e) {
+                    return new Outcome(new SimpleError("ERR invalid expire time in 'set' command"), null);
+                }
+            } else {
+                expireAt = rawValue;
             }
-            store.set(args.get(0).asString(), args.get(1).data(), expireAt);
-            return new SimpleString("OK");
+
+            if (expireAt <= store.getClock().millis()) {
+                boolean deleted = store.delete(keyArg.asString());
+                List<BulkString> aof = deleted ? List.of(BulkString.of("DEL"), keyArg) : null;
+                return new Outcome(new SimpleString("OK"), aof);
+            }
+
+            store.set(keyArg.asString(), valueArg.data(), expireAt);
+            List<BulkString> aof = List.of(
+                    BulkString.of("SET"),
+                    keyArg,
+                    valueArg,
+                    BulkString.of("PXAT"),
+                    BulkString.of(Long.toString(expireAt))
+            );
+            return new Outcome(new SimpleString("OK"), aof);
         }
-        return new SimpleError("ERR syntax error");
+        return new Outcome(new SimpleError("ERR syntax error"), null);
     }
 }

@@ -23,6 +23,13 @@ public interface Command {
     String name();
 
     /**
+     * Kết quả thực thi một lệnh: câu trả lời gửi về client và lệnh tương đương cần ghi vào AOF
+     * ({@code null} nếu là lệnh đọc, lệnh lỗi hoặc lệnh không làm thay đổi dữ liệu).
+     */
+    record Outcome(RespValue response, List<BulkString> aofCommand) {
+    }
+
+    /**
      * Chạy lệnh. Được gọi đồng thời từ nhiều thread client, nên class lệnh không được giữ
      * trạng thái riêng của một lần gọi trong field.
      *
@@ -30,6 +37,21 @@ public interface Command {
      * @return câu trả lời gửi cho client, lỗi cũng là một câu trả lời (SimpleError)
      */
     RespValue execute(List<BulkString> args);
+
+    /**
+     * Trả về {@code true} nếu lệnh có thể làm thay đổi dữ liệu (cần đồng bộ thứ tự ghi RAM và AOF).
+     */
+    default boolean isWrite() {
+        return false;
+    }
+
+    /**
+     * Chạy lệnh và trả về cả lệnh tương đương để ghi AOF.
+     * Mặc định coi là lệnh chỉ đọc ({@code aofCommand == null}).
+     */
+    default Outcome executeWithOutcome(List<BulkString> args) {
+        return new Outcome(execute(args), null);
+    }
 
     /** Lỗi sai số tham số, cùng định dạng với Redis thật. */
     static SimpleError wrongNumberOfArguments(String name) {

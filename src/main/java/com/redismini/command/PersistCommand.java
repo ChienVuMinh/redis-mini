@@ -29,13 +29,24 @@ public class PersistCommand implements Command {
     }
 
     @Override
+    public boolean isWrite() {
+        return true;
+    }
+
+    @Override
     public RespValue execute(List<BulkString> args) {
+        return executeWithOutcome(args).response();
+    }
+
+    @Override
+    public Outcome executeWithOutcome(List<BulkString> args) {
         if (args.size() != 1) {
-            return Command.wrongNumberOfArguments(name());
+            return new Outcome(Command.wrongNumberOfArguments(name()), null);
         }
         String key = args.get(0).asString();
         boolean persisted = store.persist(key);
-        return new RespInteger(persisted ? 1 : 0);
+        List<BulkString> aof = persisted ? List.of(BulkString.of("PERSIST"), args.get(0)) : null;
+        return new Outcome(new RespInteger(persisted ? 1 : 0), aof);
     }
 }
 

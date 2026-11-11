@@ -109,4 +109,30 @@ class SetCommandTest {
 
         assertThat(store.exists("k")).isFalse();
     }
+
+    @Test
+    void setWithExProducesPxatAofCommand() {
+        Command.Outcome outcome = set.executeWithOutcome(
+                List.of(BulkString.of("k"), BulkString.of("v"), BulkString.of("EX"), BulkString.of("10")));
+
+        assertThat(outcome.response()).isEqualTo(new SimpleString("OK"));
+        assertThat(outcome.aofCommand()).containsExactly(
+                BulkString.of("SET"),
+                BulkString.of("k"),
+                BulkString.of("v"),
+                BulkString.of("PXAT"),
+                BulkString.of("1010000")
+        );
+    }
+
+    @Test
+    void setWithPxatSetsAbsoluteExpiration() {
+        assertThat(set.execute(List.of(
+                BulkString.of("k"), BulkString.of("v"), BulkString.of("PXAT"), BulkString.of("1005000"))))
+                .isEqualTo(new SimpleString("OK"));
+
+        assertThat(store.getTtlSeconds("k")).isEqualTo(5);
+        clock.advanceSeconds(5);
+        assertThat(store.get("k")).isNull();
+    }
 }

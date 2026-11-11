@@ -27,9 +27,19 @@ public class IncrCommand implements Command {
     }
 
     @Override
+    public boolean isWrite() {
+        return true;
+    }
+
+    @Override
     public RespValue execute(List<BulkString> args) {
+        return executeWithOutcome(args).response();
+    }
+
+    @Override
+    public Outcome executeWithOutcome(List<BulkString> args) {
         if (args.size() != 1) {
-            return Command.wrongNumberOfArguments(name());
+            return new Outcome(Command.wrongNumberOfArguments(name()), null);
         }
         try {
             // Đọc, cộng, ghi trong một lần update: hai client INCR cùng lúc không làm mất lần tăng nào
@@ -38,11 +48,14 @@ public class IncrCommand implements Command {
                 // addExact ném ArithmeticException thay vì âm thầm tràn thành số âm
                 return Long.toString(Math.addExact(current, 1)).getBytes(StandardCharsets.US_ASCII);
             });
-            return new RespInteger(parseInteger(result));
+            return new Outcome(
+                    new RespInteger(parseInteger(result)),
+                    List.of(BulkString.of("INCR"), args.get(0))
+            );
         } catch (NumberFormatException e) {
-            return new SimpleError("ERR value is not an integer or out of range");
+            return new Outcome(new SimpleError("ERR value is not an integer or out of range"), null);
         } catch (ArithmeticException e) {
-            return new SimpleError("ERR increment or decrement would overflow");
+            return new Outcome(new SimpleError("ERR increment or decrement would overflow"), null);
         }
     }
 

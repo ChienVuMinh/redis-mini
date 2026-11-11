@@ -2,6 +2,8 @@ package com.redismini.store;
 
 import java.time.Clock;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -206,6 +208,21 @@ public class DataStore {
     /** Trả về danh sách tất cả các key có cấu hình TTL. Giống db->expires trong Redis. */
     public Set<String> expiresKeySet() {
         return Collections.unmodifiableSet(expires);
+    }
+
+    /**
+     * Tạo bản chụp các entry còn hạn tại thời điểm hiện tại (dùng cho BGREWRITEAOF).
+     */
+    public Map<String, Entry> snapshot() {
+        long now = clock.millis();
+        Map<String, Entry> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Entry> e : data.entrySet()) {
+            Entry entry = e.getValue();
+            if (!entry.isExpired(now)) {
+                result.put(e.getKey(), entry);
+            }
+        }
+        return result;
     }
 
     /**

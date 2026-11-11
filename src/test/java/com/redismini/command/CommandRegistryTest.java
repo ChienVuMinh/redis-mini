@@ -1,5 +1,8 @@
 package com.redismini.command;
 
+import com.redismini.persistence.AofWriter;
+import com.redismini.persistence.FsyncPolicy;
+import com.redismini.protocol.RespParser;
 import com.redismini.protocol.RespValue;
 import com.redismini.protocol.RespValue.BulkString;
 import com.redismini.protocol.RespValue.RespInteger;
@@ -7,7 +10,13 @@ import com.redismini.protocol.RespValue.SimpleError;
 import com.redismini.protocol.RespValue.SimpleString;
 import com.redismini.store.DataStore;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -92,5 +101,49 @@ class CommandRegistryTest {
         assertThat(registry.execute(command("TTL", "k"))).isEqualTo(new RespInteger(-2));
         assertThat(registry.execute(command("EXPIRE", "k", "10"))).isEqualTo(new RespInteger(0));
         assertThat(registry.execute(command("PERSIST", "k"))).isEqualTo(new RespInteger(0));
+        assertThat(registry.execute(command("PEXPIREAT", "k", "10000"))).isEqualTo(new RespInteger(0));
+        assertThat(registry.execute(command("BGREWRITEAOF")))
+                .isEqualTo(new SimpleError("ERR AOF is not enabled"));
+    }
+
+    @Test
+    void logsOnlySuccessfulMutatingCommandsToAof(@TempDir Path tempDir) throws IOException {
+        Path aofFile = tempDir.resolve("registry.aof");
+        DataStore store = new DataStore();
+        try (AofWriter writer = new AofWriter(aofFile, FsyncPolicy.ALWAYS)) {
+            CommandRegistry registry = CommandRegistry.createDefault(store, writer);
+
+            // Lệnh đọc & lỗi & no-op không được ghi vào AOF
+            registry.execute(command("PING"));
+            registry.execute(command("GET", "missing"));
+            registry.execute(command("DEL", "missing"));
+            registry.execute(command("EXPIRE", "missing", "10"));
+            registry.execute(command("PERSIST", "missing"));
+            registry.execute(command("SET", "only_key"));
+            registry.execute(command("UNKNOWN"));
+
+            // Lệnh ghi thành công mới được ghi
+            registry.execute(command("SET", "k", "v"));
+            registry.execute(command("INCR", "num"));
+            registry.execute(command("DEL", "k", "missing"));
+
+            // replay() không ghi ngược vào AOF
+            registry.replay(command("SET", "replayed", "1"));
+        }
+
+        List<List<BulkString>> logged = new ArrayList<>();
+        try (var in = new BufferedInputStream(Files.newInputStream(aofFile))) {
+            RespParser parser = new RespParser(in);
+            List<BulkString> cmd;
+            while ((cmd = parser.readCommand()) != null) {
+                logged.add(cmd);
+            }
+        }
+
+        assertThat(logged).containsExactly(
+                command("SET", "k", "v"),
+                command("INCR", "num"),
+                command("DEL", "k")
+        );
     }
 }
