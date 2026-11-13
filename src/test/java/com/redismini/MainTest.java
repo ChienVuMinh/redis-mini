@@ -15,4 +15,11 @@ class MainTest {
     void readsPortFromArgs() {
         assertThat(Main.parsePort(new String[]{"--port", "7000"})).isEqualTo(7000);
     }
+
+    @Test
+    void defaultsToNioModeUnlessBlockingFlagIsPresent() {
+        assertThat(Main.isBlockingMode(new String[]{})).isFalse();
+        assertThat(Main.isBlockingMode(new String[]{"--port", "6380"})).isFalse();
+        assertThat(Main.isBlockingMode(new String[]{"--blocking"})).isTrue();
+    }
 }

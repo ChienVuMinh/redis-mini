@@ -5,6 +5,7 @@ import com.redismini.persistence.AofLoader;
 import com.redismini.persistence.AofWriter;
 import com.redismini.persistence.FsyncPolicy;
 import com.redismini.server.BlockingServer;
+import com.redismini.server.NioServer;
 import com.redismini.store.DataStore;
 import com.redismini.store.ExpiryManager;
 
@@ -12,7 +13,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 /**
- * Điểm khởi động: java -jar redis-mini.jar --port 6380
+ * Điểm khởi động: {@code java -jar redis-mini.jar [--port 6380] [--blocking]}
  */
 public class Main {
 
@@ -21,7 +22,8 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         int port = parsePort(args);
-        System.out.println("redis-mini starting on port " + port);
+        boolean blocking = isBlockingMode(args);
+        System.out.println("redis-mini starting on port " + port + (blocking ? " (blocking)" : " (nio)"));
 
         DataStore store = new DataStore();
         // Load và dọn đuôi file AOF (nếu bị cắt dở) trước khi mở AofWriter để tránh xung đột file handle trên Windows
@@ -34,17 +36,37 @@ public class Main {
         try (AofWriter aofWriter = new AofWriter(DEFAULT_AOF_PATH, FsyncPolicy.EVERYSEC)) {
             aofWriter.start();
             CommandRegistry registry = CommandRegistry.createDefault(store, aofWriter);
-            try (BlockingServer server = new BlockingServer(port, registry, expiryManager)) {
-                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                    try {
-                        server.close();
-                        aofWriter.close();
-                    } catch (IOException ignored) {
-                    }
-                }, "shutdown-hook"));
-                server.start();
+            if (blocking) {
+                try (BlockingServer server = new BlockingServer(port, registry, expiryManager)) {
+                    registerShutdownHook(server, aofWriter);
+                    server.start();
+                }
+            } else {
+                try (NioServer server = new NioServer(port, registry, expiryManager)) {
+                    registerShutdownHook(server, aofWriter);
+                    server.start();
+                }
             }
         }
+    }
+
+    private static void registerShutdownHook(AutoCloseable server, AofWriter aofWriter) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                server.close();
+                aofWriter.close();
+            } catch (Exception ignored) {
+            }
+        }, "shutdown-hook"));
+    }
+
+    static boolean isBlockingMode(String[] args) {
+        for (String arg : args) {
+            if ("--blocking".equals(arg)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static int parsePort(String[] args) {
