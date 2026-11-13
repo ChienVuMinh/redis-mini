@@ -33,6 +33,7 @@ public class NioServer implements AutoCloseable {
 
     private static final int INITIAL_READ_BUFFER_SIZE = 8 * 1024;
     private static final int MAX_READ_BUFFER_SIZE = 64 * 1024 * 1024;
+    private static final int BACKLOG = 1024;
 
     private final int port;
     private final CommandRegistry commands;
@@ -66,7 +67,7 @@ public class NioServer implements AutoCloseable {
         selector = Selector.open();
         serverChannel = ServerSocketChannel.open();
         serverChannel.configureBlocking(false);
-        serverChannel.bind(new InetSocketAddress(port));
+        serverChannel.bind(new InetSocketAddress(port), BACKLOG);
         boundPort = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
         serverChannel.register(selector, SelectionKey.OP_ACCEPT);
         running = true;

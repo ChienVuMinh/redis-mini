@@ -22,6 +22,8 @@ import java.util.concurrent.Executors;
  */
 public class BlockingServer implements AutoCloseable {
 
+    private static final int BACKLOG = 1024;
+
     private final int port;
     private final CommandRegistry commands;
     private final ExpiryManager expiryManager;
@@ -52,7 +54,7 @@ public class BlockingServer implements AutoCloseable {
      * Tách riêng khỏi serve() để test biết chắc cổng đã mở trước khi kết nối.
      */
     public void bind() throws IOException {
-        serverSocket = new ServerSocket(port);
+        serverSocket = new ServerSocket(port, BACKLOG);
         running = true;
         if (expiryManager != null) {
             expiryManager.start();
